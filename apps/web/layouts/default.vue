@@ -16,12 +16,7 @@ const links = [
         <h1>投资全景助手</h1>
       </div>
       <nav class="nav">
-        <NuxtLink
-          v-for="link in links"
-          :key="link.to"
-          :to="link.to"
-          class="nav-link"
-        >
+        <NuxtLink v-for="link in links" :key="link.to" :to="link.to" class="nav-link">
           {{ link.label }}
         </NuxtLink>
       </nav>

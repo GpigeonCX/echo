@@ -5,6 +5,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.models.asset import Asset
+from app.models.holding import Holding
 from app.models.investment_plan import InvestmentPlan
 from app.models.portfolio_snapshot import PortfolioSnapshot
 from app.models.price_snapshot import PriceSnapshot
@@ -36,6 +37,7 @@ def _record_portfolio_snapshot(db: Session, total_assets: float, peak_assets: fl
 
 def list_holdings_summary(db: Session) -> list[HoldingSummaryItem]:
     assets = db.scalars(select(Asset).order_by(Asset.code)).all()
+    manual_holdings = db.scalars(select(Holding)).all()
     confirmed_transactions = db.scalars(
         select(Transaction).where(Transaction.status == "confirmed").order_by(Transaction.created_at)
     ).all()
@@ -45,6 +47,7 @@ def list_holdings_summary(db: Session) -> list[HoldingSummaryItem]:
     latest_snapshots: dict[int, PriceSnapshot] = {}
     for item in snapshot_rows:
         latest_snapshots.setdefault(item.asset_id, item)
+    manual_holding_map = {item.asset_id: item for item in manual_holdings}
 
     totals: dict[int, dict[str, Decimal]] = defaultdict(
         lambda: {"quantity": Decimal("0"), "amount": Decimal("0"), "fee": Decimal("0")}
@@ -63,10 +66,15 @@ def list_holdings_summary(db: Session) -> list[HoldingSummaryItem]:
     total_market_value = Decimal("0")
     partials: list[dict[str, Decimal | str]] = []
     for asset in assets:
-        quantity = totals[asset.id]["quantity"]
-        invested_amount = totals[asset.id]["amount"]
+        manual_holding = manual_holding_map.get(asset.id)
+        quantity = Decimal(manual_holding.quantity) if manual_holding else totals[asset.id]["quantity"]
         fee = totals[asset.id]["fee"]
-        if quantity <= 0 and invested_amount == 0:
+        invested_amount = (
+            Decimal(manual_holding.average_cost) * quantity
+            if manual_holding
+            else totals[asset.id]["amount"]
+        )
+        if quantity <= 0 and invested_amount == 0 and manual_holding is None:
             continue
 
         snapshot = latest_snapshots.get(asset.id)
@@ -74,7 +82,7 @@ def list_holdings_summary(db: Session) -> list[HoldingSummaryItem]:
         fx_rate = Decimal(snapshot.fx_rate_to_cny) if snapshot else Decimal("1")
         market_value = quantity * price * fx_rate
         cost = invested_amount + fee
-        avg_cost = (cost / quantity) if quantity > 0 else Decimal("0")
+        avg_cost = Decimal(manual_holding.average_cost) if manual_holding else ((cost / quantity) if quantity > 0 else Decimal("0"))
         pnl = market_value - cost
         total_market_value += market_value
         partials.append(
@@ -197,6 +205,7 @@ def list_plan_summary(db: Session) -> list[PlanSummary]:
         )
         summaries.append(
             PlanSummary(
+                id=plan.id,
                 name=plan.name,
                 total_budget=float(plan.total_budget),
                 months=plan.months,

@@ -194,6 +194,10 @@ a {
   cursor: pointer;
 }
 
+.submit-btn:hover {
+  opacity: 0.92;
+}
+
 @media (max-width: 900px) {
   .shell {
     grid-template-columns: 1fr;
