@@ -5,6 +5,7 @@ description = "Personal investment assistant API"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "akshare>=1.17.41",
   "fastapi>=0.116.0",
   "httpx>=0.28.1",
   "uvicorn[standard]>=0.35.0",

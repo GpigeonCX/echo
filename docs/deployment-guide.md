@@ -72,11 +72,14 @@ npm run dev
 当前后端默认使用：
 
 - `DATABASE_URL=sqlite:///./echo.db`
+- `QUOTE_SYNC_ENABLED=true`
+- `QUOTE_SYNC_INTERVAL_SECONDS=1800`
 
 这意味着：
 
 - 不需要先装 MySQL 就能本地跑起来
 - 适合快速验证页面、接口、流程
+- 默认每 30 分钟自动同步一次行情
 
 ## 5. 切换到 MySQL
 
@@ -105,6 +108,8 @@ MYSQL_PORT=3306
 MYSQL_USER=root
 MYSQL_PASSWORD=root
 MYSQL_DATABASE=echo
+QUOTE_SYNC_ENABLED=true
+QUOTE_SYNC_INTERVAL_SECONDS=1800
 ```
 
 注意：
@@ -190,6 +195,7 @@ cd apps/api
 - `GET /api/assets/holdings`
 - `GET /api/dashboard/summary`
 - `GET /api/transactions`
+- `POST /api/quotes/sync`
 
 ### 7.2 手工新增一笔交易
 
@@ -216,7 +222,20 @@ cd apps/api
 
 - `POST /api/transactions`
 
-### 7.3 重新初始化本地 SQLite
+### 7.3 手工触发行情同步
+
+接口：
+
+- `POST /api/quotes/sync`
+
+返回内容包括：
+
+- 同步是否成功
+- 同步了多少个标的
+- 同步时间
+- 每个标的的价格、汇率和数据来源
+
+### 7.4 重新初始化本地 SQLite
 
 如果你只是本地调试，想重置演示数据：
 

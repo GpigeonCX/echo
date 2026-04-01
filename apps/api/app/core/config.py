@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     mysql_user: str = "root"
     mysql_password: str = "root"
     mysql_database: str = "echo"
+    quote_sync_enabled: bool = True
+    quote_sync_interval_seconds: int = 1800
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
