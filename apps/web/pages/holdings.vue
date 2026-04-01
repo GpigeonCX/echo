@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const config = useRuntimeConfig()
-const { data } = await useFetch(`${config.public.apiBase}/assets`, { default: () => [] })
+const { data } = await useFetch(`${config.public.apiBase}/assets/holdings`, { default: () => [] })
 </script>
 
 <template>
@@ -18,9 +18,12 @@ const { data } = await useFetch(`${config.public.apiBase}/assets`, { default: ()
           <th>代码</th>
           <th>名称</th>
           <th>类型</th>
-          <th>市场</th>
-          <th>币种</th>
-          <th>目标权重</th>
+          <th>数量</th>
+          <th>现价</th>
+          <th>成本</th>
+          <th>市值(CNY)</th>
+          <th>收益(CNY)</th>
+          <th>当前权重</th>
         </tr>
       </thead>
       <tbody>
@@ -28,9 +31,12 @@ const { data } = await useFetch(`${config.public.apiBase}/assets`, { default: ()
           <td>{{ item.code }}</td>
           <td>{{ item.name }}</td>
           <td>{{ item.asset_type }}</td>
-          <td>{{ item.market }}</td>
-          <td>{{ item.currency }}</td>
-          <td>{{ (Number(item.target_weight) * 100).toFixed(2) }}%</td>
+          <td>{{ Number(item.quantity).toLocaleString() }}</td>
+          <td>{{ Number(item.current_price).toLocaleString() }}</td>
+          <td>{{ Number(item.average_cost).toFixed(4) }}</td>
+          <td>¥{{ Number(item.market_value_cny).toLocaleString() }}</td>
+          <td>¥{{ Number(item.profit_cny).toLocaleString() }}</td>
+          <td>{{ (Number(item.current_weight) * 100).toFixed(2) }}%</td>
         </tr>
       </tbody>
     </table>
