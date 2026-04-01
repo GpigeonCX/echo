@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -23,6 +25,8 @@ class DashboardSummary(BaseModel):
     peak_assets: float
     max_drawdown_rate: float
     drawdown_stage: str
+    last_snapshot_at: datetime | None = None
+    last_quote_sync_at: datetime | None = None
     allocation: list[AllocationItem]
     rebalance_suggestions: list[RebalanceSuggestionItem]
     alerts: list[str]

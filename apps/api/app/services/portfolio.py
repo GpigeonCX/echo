@@ -1,5 +1,6 @@
 from collections import defaultdict
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
@@ -25,17 +26,7 @@ def _get_drawdown_stage(drawdown_rate: float) -> str:
     return "none"
 
 
-def _record_portfolio_snapshot(db: Session, total_assets: float, peak_assets: float, drawdown_rate: float) -> None:
-    snapshot = PortfolioSnapshot(
-        total_assets=total_assets,
-        peak_assets=peak_assets,
-        drawdown_rate=drawdown_rate,
-    )
-    db.add(snapshot)
-    db.commit()
-
-
-def list_holdings_summary(db: Session) -> list[HoldingSummaryItem]:
+def _build_holdings_partials(db: Session) -> list[dict[str, Any]]:
     assets = db.scalars(select(Asset).order_by(Asset.code)).all()
     manual_holdings = db.scalars(select(Holding)).all()
     confirmed_transactions = db.scalars(
@@ -62,17 +53,14 @@ def list_holdings_summary(db: Session) -> list[HoldingSummaryItem]:
             totals[tx.asset_id]["amount"] -= Decimal(tx.amount)
             totals[tx.asset_id]["fee"] += Decimal(tx.fee)
 
-    result: list[HoldingSummaryItem] = []
+    partials: list[dict[str, Any]] = []
     total_market_value = Decimal("0")
-    partials: list[dict[str, Decimal | str]] = []
     for asset in assets:
         manual_holding = manual_holding_map.get(asset.id)
         quantity = Decimal(manual_holding.quantity) if manual_holding else totals[asset.id]["quantity"]
         fee = totals[asset.id]["fee"]
         invested_amount = (
-            Decimal(manual_holding.average_cost) * quantity
-            if manual_holding
-            else totals[asset.id]["amount"]
+            Decimal(manual_holding.average_cost) * quantity if manual_holding else totals[asset.id]["amount"]
         )
         if quantity <= 0 and invested_amount == 0 and manual_holding is None:
             continue
@@ -92,7 +80,7 @@ def list_holdings_summary(db: Session) -> list[HoldingSummaryItem]:
                 "asset_type": asset.asset_type,
                 "market": asset.market,
                 "currency": asset.currency,
-                "target_weight": Decimal(asset.target_weight),
+                "target_weight": float(asset.target_weight),
                 "quantity": quantity,
                 "current_price": price,
                 "average_cost": avg_cost,
@@ -102,24 +90,48 @@ def list_holdings_summary(db: Session) -> list[HoldingSummaryItem]:
         )
 
     for item in partials:
-        weight = (item["market_value_cny"] / total_market_value) if total_market_value > 0 else Decimal("0")
-        result.append(
-            HoldingSummaryItem(
-                code=str(item["code"]),
-                name=str(item["name"]),
-                asset_type=str(item["asset_type"]),
-                market=str(item["market"]),
-                currency=str(item["currency"]),
-                target_weight=float(item["target_weight"]),
-                current_weight=float(weight),
-                quantity=float(item["quantity"]),
-                current_price=float(item["current_price"]),
-                average_cost=float(item["average_cost"]),
-                market_value_cny=float(item["market_value_cny"]),
-                profit_cny=float(item["profit_cny"]),
-            )
+        item["current_weight"] = float(item["market_value_cny"] / total_market_value) if total_market_value > 0 else 0
+    return partials
+
+
+def list_holdings_summary(db: Session) -> list[HoldingSummaryItem]:
+    partials = _build_holdings_partials(db)
+    return [
+        HoldingSummaryItem(
+            code=str(item["code"]),
+            name=str(item["name"]),
+            asset_type=str(item["asset_type"]),
+            market=str(item["market"]),
+            currency=str(item["currency"]),
+            target_weight=float(item["target_weight"]),
+            current_weight=float(item["current_weight"]),
+            quantity=float(item["quantity"]),
+            current_price=float(item["current_price"]),
+            average_cost=float(item["average_cost"]),
+            market_value_cny=float(item["market_value_cny"]),
+            profit_cny=float(item["profit_cny"]),
         )
-    return result
+        for item in partials
+    ]
+
+
+def record_portfolio_snapshot(db: Session) -> PortfolioSnapshot:
+    partials = _build_holdings_partials(db)
+    total_assets = float(sum(item["market_value_cny"] for item in partials))
+    previous_peak = db.scalar(
+        select(PortfolioSnapshot.peak_assets).order_by(PortfolioSnapshot.peak_assets.desc()).limit(1)
+    )
+    peak_assets = max(total_assets, float(previous_peak or 0), 336000)
+    drawdown_rate = ((total_assets - peak_assets) / peak_assets) if peak_assets else 0
+    snapshot = PortfolioSnapshot(
+        total_assets=total_assets,
+        peak_assets=peak_assets,
+        drawdown_rate=drawdown_rate,
+    )
+    db.add(snapshot)
+    db.commit()
+    db.refresh(snapshot)
+    return snapshot
 
 
 def get_dashboard_summary(db: Session) -> DashboardSummary:
@@ -127,17 +139,16 @@ def get_dashboard_summary(db: Session) -> DashboardSummary:
     total_assets = sum(item.market_value_cny for item in holdings)
     cash_assets = sum(item.market_value_cny for item in holdings if item.asset_type in {"cash", "money_fund"})
     unrealized_pnl = sum(item.profit_cny for item in holdings)
-    existing_peak = db.scalar(
-        select(PortfolioSnapshot.peak_assets).order_by(PortfolioSnapshot.peak_assets.desc()).limit(1)
-    )
-    peak_assets = max(total_assets, float(existing_peak or 0), 336000)
-    drawdown_rate = ((total_assets - peak_assets) / peak_assets) if peak_assets else 0
-    existing_max_drawdown = db.scalar(
-        select(PortfolioSnapshot.drawdown_rate).order_by(PortfolioSnapshot.drawdown_rate.asc()).limit(1)
-    )
-    max_drawdown_rate = min(drawdown_rate, float(existing_max_drawdown or 0))
+
+    latest_snapshot = db.scalar(select(PortfolioSnapshot).order_by(PortfolioSnapshot.recorded_at.desc()).limit(1))
+    highest_snapshot = db.scalar(select(PortfolioSnapshot).order_by(PortfolioSnapshot.peak_assets.desc()).limit(1))
+    worst_snapshot = db.scalar(select(PortfolioSnapshot).order_by(PortfolioSnapshot.drawdown_rate.asc()).limit(1))
+    latest_quote_snapshot = db.scalar(select(PriceSnapshot).order_by(PriceSnapshot.captured_at.desc()).limit(1))
+
+    peak_assets = float(highest_snapshot.peak_assets) if highest_snapshot else max(total_assets, 336000)
+    drawdown_rate = float(latest_snapshot.drawdown_rate) if latest_snapshot else (((total_assets - peak_assets) / peak_assets) if peak_assets else 0)
+    max_drawdown_rate = float(worst_snapshot.drawdown_rate) if worst_snapshot else drawdown_rate
     drawdown_stage = _get_drawdown_stage(drawdown_rate)
-    _record_portfolio_snapshot(db, total_assets, peak_assets, drawdown_rate)
 
     allocation_map: dict[str, float] = {"基金": 0.0, "港股": 0.0, "现金": 0.0}
     alerts: list[str] = []
@@ -184,6 +195,8 @@ def get_dashboard_summary(db: Session) -> DashboardSummary:
         peak_assets=peak_assets,
         max_drawdown_rate=max_drawdown_rate,
         drawdown_stage=drawdown_stage,
+        last_snapshot_at=latest_snapshot.recorded_at if latest_snapshot else None,
+        last_quote_sync_at=latest_quote_snapshot.captured_at if latest_quote_snapshot else None,
         allocation=[AllocationItem(name=name, value=value) for name, value in allocation_map.items() if value > 0],
         rebalance_suggestions=rebalance_suggestions,
         alerts=alerts,

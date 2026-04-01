@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.asset import Asset
 from app.models.price_snapshot import PriceSnapshot
 from app.schemas.quote import QuoteSyncItem, QuoteSyncResult
+from app.services.portfolio import record_portfolio_snapshot
 
 
 def _safe_import_akshare():
@@ -111,6 +112,8 @@ def sync_quotes_once(db: Session) -> QuoteSyncResult:
             continue
 
     db.commit()
+    if synced_items:
+        record_portfolio_snapshot(db)
     message = "Quotes synced" if synced_items else "No quotes synced"
     return QuoteSyncResult(
         success=bool(synced_items),

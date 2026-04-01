@@ -10,6 +10,8 @@ const { data } = await useFetch(`${config.public.apiBase}/dashboard/summary`, {
     peak_assets: 0,
     max_drawdown_rate: 0,
     drawdown_stage: "none",
+    last_snapshot_at: null,
+    last_quote_sync_at: null,
     allocation: [],
     rebalance_suggestions: [],
     alerts: []
@@ -32,7 +34,7 @@ const cards = computed(() => [
       <p class="eyebrow">Dashboard</p>
       <h2>组合总览</h2>
     </div>
-    <div class="badge">自动跟踪版本 v0.2</div>
+    <div class="badge">自动跟踪版本 v0.3</div>
   </section>
 
   <section class="card-grid">
@@ -58,11 +60,22 @@ const cards = computed(() => [
 
     <article class="card">
       <div class="section-title">
-        <h3>提醒</h3>
-        <span>站内 / 邮件</span>
+        <h3>同步状态</h3>
+        <span>快照驱动</span>
       </div>
       <ul class="simple-list">
-        <li v-for="alert in data.alerts" :key="alert">{{ alert }}</li>
+        <li>
+          <span>最近行情同步</span>
+          <strong>{{ data.last_quote_sync_at ? new Date(data.last_quote_sync_at).toLocaleString() : "暂无" }}</strong>
+        </li>
+        <li>
+          <span>最近组合快照</span>
+          <strong>{{ data.last_snapshot_at ? new Date(data.last_snapshot_at).toLocaleString() : "暂无" }}</strong>
+        </li>
+        <li>
+          <span>当前回撤阶段</span>
+          <strong>{{ data.drawdown_stage }}</strong>
+        </li>
       </ul>
     </article>
   </section>
@@ -84,13 +97,11 @@ const cards = computed(() => [
 
     <article class="card">
       <div class="section-title">
-        <h3>回撤阶段</h3>
-        <span>{{ data.drawdown_stage }}</span>
+        <h3>提醒</h3>
+        <span>站内 / 邮件</span>
       </div>
       <ul class="simple-list">
-        <li><span>第一档</span><strong>-15%</strong></li>
-        <li><span>第二档</span><strong>-25%</strong></li>
-        <li><span>第三档</span><strong>-35%</strong></li>
+        <li v-for="alert in data.alerts" :key="alert">{{ alert }}</li>
       </ul>
     </article>
   </section>

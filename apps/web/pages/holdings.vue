@@ -1,6 +1,9 @@
 <script setup lang="ts">
 const config = useRuntimeConfig()
 const { data, refresh } = await useFetch(`${config.public.apiBase}/assets/holdings`, { default: () => [] })
+const { data: dashboard } = await useFetch(`${config.public.apiBase}/dashboard/summary`, {
+  default: () => ({ last_quote_sync_at: null })
+})
 
 const form = reactive({
   code: "",
@@ -43,6 +46,10 @@ async function submitHolding() {
     <div>
       <p class="eyebrow">Holdings</p>
       <h2>持仓列表</h2>
+    </div>
+    <div class="badge">
+      最近行情同步：
+      {{ dashboard.last_quote_sync_at ? new Date(dashboard.last_quote_sync_at).toLocaleString() : "暂无" }}
     </div>
   </section>
 
