@@ -1,0 +1,14 @@
+.DS_Store
+.idea/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+node_modules/
+.nuxt/
+.output/
+dist/
+.env
+apps/api/.pytest_cache/
+apps/api/.mypy_cache/
+apps/api/.ruff_cache/
